@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import torch
 
@@ -36,10 +39,9 @@ def main() -> None:
     total.backward()
     assert torch.isfinite(total)
     print("MSP-Net core smoke test passed")
-    print(f"logits={tuple(output['logits'].shape)}, routing={tuple(output['routing'].shape)}, loss={float(total):.4f}")
+    print(f"logits={tuple(output['logits'].shape)}, routing={tuple(output['routing'].shape)}, loss={float(total.detach()):.4f}")
     print({name: float(value) for name, value in parts.items()})
 
 
 if __name__ == "__main__":
     main()
-
