@@ -13,3 +13,10 @@ checkpoints/
 *.ckpt
 .DS_Store
 
+# Acquisition and preprocessing outputs are intentionally not versioned.
+data_pipeline/downloads/
+data_pipeline/cache/
+data_pipeline/outputs/
+*.SAFE/
+*.tif
+*.tiff

@@ -33,6 +33,15 @@ This repository is intended to expose the manuscript's core model logic. It
 does not include cloud training launchers, checkpoints, private experiment
 logs, or institution-specific data preparation scripts.
 
+## Public acquisition and preparation helpers
+
+Small, parameterized utilities for Sentinel-1 catalog search/download,
+rate-limited place-name geocoding, bounded OSM/Overpass retrieval, and public
+VV/VH manifest validation are provided under `data_pipeline/`. They require
+separate optional dependencies listed in `data_pipeline/requirements.txt` and
+do not contain credentials or private source records. See
+`data_pipeline/README.md` for usage and source-data attribution requirements.
+
 ## Companion data
 
 The sanitized seven-port SAR-AIS chips and metadata are released separately:
