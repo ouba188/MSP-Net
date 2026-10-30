@@ -39,16 +39,25 @@ def frequency_vca_loss(visual_alignment: torch.Tensor, prior_alignment: torch.Te
 def mspnet_loss(
     logits: torch.Tensor,
     labels: torch.Tensor,
-    visual_alignment: torch.Tensor,
-    prior_alignment: torch.Tensor,
+    visual_alignment: torch.Tensor | None,
+    prior_alignment: torch.Tensor | None,
     lambda_v: float = 5e-4,
     temperature: float = 0.5,
     label_smoothing: float = 0.08,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Stage-2 classification objective with the Freq-VCA auxiliary term."""
+    """Stage-2 objective; set lambda_v=0 for classification-only evaluation.
+
+    For the joint objective in eval mode, call the model with
+    return_alignment=True to obtain the two alignment embeddings.
+    """
 
     classification = F.cross_entropy(logits, labels, label_smoothing=label_smoothing)
-    contrastive = frequency_vca_loss(visual_alignment, prior_alignment, temperature=temperature)
+    if lambda_v == 0:
+        contrastive = logits.new_zeros(())
+    else:
+        if visual_alignment is None or prior_alignment is None:
+            raise ValueError("The joint loss requires alignment embeddings; use return_alignment=True or lambda_v=0")
+        contrastive = frequency_vca_loss(visual_alignment, prior_alignment, temperature=temperature)
     total = classification + float(lambda_v) * contrastive
     return total, {"classification": classification.detach(), "freq_vca": contrastive.detach()}
 

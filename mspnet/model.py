@@ -14,13 +14,16 @@ class ResNet18VisualBackbone(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         backbone = resnet18(weights=None)
-        self.features = nn.Sequential(*list(backbone.children())[:-2])
+        self.stem = nn.Sequential(backbone.conv1, backbone.bn1, backbone.relu, backbone.maxpool)
+        self.layer1, self.layer2 = backbone.layer1, backbone.layer2
+        self.layer3, self.layer4 = backbone.layer3, backbone.layer4
         self.pool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        feature_map = self.features(x)
-        visual_feature = self.pool(feature_map).flatten(1)
-        return feature_map, visual_feature
+        x = self.layer2(self.layer1(self.stem(x)))
+        frequency_map = self.layer3(x)
+        visual_feature = self.pool(self.layer4(frequency_map)).flatten(1)
+        return frequency_map, visual_feature
 
 
 class MSPNet(nn.Module):
@@ -31,14 +34,16 @@ class MSPNet(nn.Module):
     the outer-fold/internal-cross-fitting protocol described in the paper.
     """
 
-    def __init__(self, osm_dim: int, num_classes: int = 3, osm_availability_dim: int = 0, token_dim: int = 512) -> None:
+    def __init__(self, osm_dim: int, num_classes: int = 3, osm_availability_dim: int = 0, token_dim: int = 512, **fusion_options) -> None:
         super().__init__()
+        if token_dim != 512:
+            raise ValueError("The manuscript classification path uses token_dim=512")
         self.visual = ResNet18VisualBackbone()
         self.scale_encoder = ScalePriorEncoder(token_dim=token_dim)
         self.position_encoder = PositionPriorEncoder(token_dim=token_dim)
         self.osm_encoder = OSMPriorEncoder(osm_dim, token_dim=token_dim, availability_dim=osm_availability_dim)
         self.null_prior = NullPrior(token_dim=token_dim)
-        self.fpcsa = FPCSA(feature_channels=512, token_dim=token_dim)
+        self.fpcsa = FPCSA(feature_channels=256, token_dim=token_dim, **fusion_options)
         self.classifier = nn.Linear(token_dim, num_classes)
 
     def forward(
@@ -49,7 +54,8 @@ class MSPNet(nn.Module):
         local_position: torch.Tensor,
         osm_features: torch.Tensor,
         osm_availability: torch.Tensor | None = None,
-    ) -> dict[str, torch.Tensor | tuple[str, ...]]:
+        return_alignment: bool | None = None,
+    ) -> dict[str, torch.Tensor | tuple[str, ...] | None]:
         feature_map, visual_feature = self.visual(sar_input)
         scale_token = self.scale_encoder(size_stats.detach())
         position_token = self.position_encoder(lonlat, local_position)
@@ -59,6 +65,7 @@ class MSPNet(nn.Module):
             feature_map,
             visual_feature,
             {"scale": scale_token, "position": position_token, "osm": osm_token, "null": null_token},
+            return_alignment=return_alignment,
         )
         return {
             "logits": self.classifier(fused.feature),

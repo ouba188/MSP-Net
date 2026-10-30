@@ -46,8 +46,8 @@ class ScalePriorEncoder(nn.Module):
         mu_l, mu_w, logvar_l, logvar_w = size_stats.unbind(dim=1)
         pred_l = torch.expm1(mu_l).clamp_min(0.0)
         pred_w = torch.expm1(mu_w).clamp_min(0.0)
-        confidence_l = torch.exp(-0.5 * logvar_l).clamp_max(1.0e3)
-        confidence_w = torch.exp(-0.5 * logvar_w).clamp_max(1.0e3)
+        confidence_l = torch.exp(-0.5 * logvar_l)
+        confidence_w = torch.exp(-0.5 * logvar_w)
         eps = torch.finfo(size_stats.dtype).eps
         return torch.stack(
             (
@@ -67,6 +67,13 @@ class ScalePriorEncoder(nn.Module):
         confidence = torch.sqrt((descriptor[:, 4] * descriptor[:, 5]).clamp_min(0.0)).unsqueeze(1)
         return confidence * self.projection(normalized)
 
+    @torch.no_grad()
+    def set_descriptor_statistics(self, training_size_stats: torch.Tensor) -> None:
+        """Fit exclusively on source/training out-of-fold size predictions."""
+        descriptor = self.descriptor(training_size_stats)
+        self.descriptor_mean.copy_(descriptor.mean(0))
+        self.descriptor_std.copy_(descriptor.std(0, correction=0).clamp_min(1.0e-6))
+
 
 class PositionPriorEncoder(nn.Module):
     """Encode global lon/lat and port-local relative position."""
@@ -74,31 +81,31 @@ class PositionPriorEncoder(nn.Module):
     def __init__(self, token_dim: int = 512, hidden_dim: int = 128, harmonics: tuple[int, ...] = (1, 2, 4)) -> None:
         super().__init__()
         self.harmonics = tuple(int(k) for k in harmonics)
-        global_dim = 4 * len(self.harmonics)
+        global_dim = 3 + 6 * len(self.harmonics)
         self.global_mlp = nn.Sequential(nn.Linear(global_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, token_dim))
         self.local_mlp = nn.Sequential(nn.Linear(3, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, token_dim))
-        self.route = nn.Sequential(nn.Linear(2 * token_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, 1))
-        self.norm = nn.LayerNorm(token_dim)
+        self.route = nn.Linear(2 * token_dim, 1)
+        self.output = nn.Linear(token_dim, token_dim, bias=False)
 
     def forward(self, lonlat: torch.Tensor, local_position: torch.Tensor) -> torch.Tensor:
         if lonlat.ndim != 2 or lonlat.shape[1] != 2:
             raise ValueError("lonlat must have shape [batch, 2] = [longitude, latitude]")
         if local_position.ndim != 2 or local_position.shape[1] != 3:
             raise ValueError("local_position must have shape [batch, 3] = [x_local, y_local, radial_distance]")
-        lon = lonlat[:, 0:1] / 180.0
-        lat = lonlat[:, 1:2] / 90.0
-        components = []
+        lon = torch.deg2rad(lonlat[:, 0:1])
+        lat = torch.deg2rad(lonlat[:, 1:2])
+        sphere = torch.cat((lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()), 1)
+        components = [sphere]
         for k in self.harmonics:
-            components.extend((torch.sin(math.pi * k * lon), torch.cos(math.pi * k * lon)))
-            components.extend((torch.sin(math.pi * k * lat), torch.cos(math.pi * k * lat)))
+            components.extend((torch.sin(math.pi * k * sphere), torch.cos(math.pi * k * sphere)))
         global_feature = self.global_mlp(torch.cat(components, dim=1))
         local_feature = self.local_mlp(local_position.float())
         route = torch.sigmoid(self.route(torch.cat((global_feature, local_feature), dim=1)))
-        return self.norm(route * global_feature + (1.0 - route) * local_feature)
+        return self.output(route * global_feature + (1.0 - route) * local_feature)
 
 
 class OSMPriorEncoder(nn.Module):
-    """Encode numeric OSM/seamark features with an availability gate."""
+    """Encode numeric OSM/seamark features with a learned channel gate."""
 
     def __init__(self, feature_dim: int, token_dim: int = 512, hidden_dim: int = 128, availability_dim: int = 0) -> None:
         super().__init__()
@@ -106,7 +113,7 @@ class OSMPriorEncoder(nn.Module):
         self.availability_dim = int(availability_dim)
         input_dim = self.feature_dim + self.availability_dim
         self.encoder = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, token_dim))
-        self.reliability = nn.Sequential(nn.Linear(token_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, 1), nn.Sigmoid())
+        self.feature_gate = nn.Sequential(nn.Linear(token_dim, token_dim), nn.Sigmoid())
         self.norm = nn.LayerNorm(token_dim)
 
     def forward(self, features: torch.Tensor, availability: torch.Tensor | None = None) -> torch.Tensor:
@@ -121,7 +128,7 @@ class OSMPriorEncoder(nn.Module):
                 raise ValueError(f"availability must have shape [batch, {self.availability_dim}]")
             features = torch.cat((features, availability), dim=1)
         encoded = self.norm(self.encoder(features.float()))
-        return torch.sigmoid(self.reliability(encoded)) * encoded
+        return self.feature_gate(encoded) * encoded
 
 
 class NullPrior(nn.Module):
