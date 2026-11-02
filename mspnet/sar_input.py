@@ -64,7 +64,9 @@ def load_png_pair(
 
     def read(path: str | Path) -> torch.Tensor:
         array = np.asarray(Image.open(path).convert("F"), dtype=np.float32)
-        tensor = torch.from_numpy(array)
+        # PIL hands back a read-only buffer; copy so the tensor is writable and
+        # torch stops warning on every call.
+        tensor = torch.from_numpy(np.array(array, dtype=np.float32, copy=True))
         if normalize_uint8 and float(tensor.max()) > 1.0:
             tensor = tensor / 255.0
         return tensor

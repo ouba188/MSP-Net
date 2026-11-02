@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 
 import torch
 from torch import nn
@@ -16,6 +17,10 @@ class ScalePriorEncoder(nn.Module):
     itself is intentionally kept outside this module: Stage 1 can be trained
     and cross-fitted independently, and this encoder consumes its frozen
     predictions in Stage 2.
+
+    The confidence weight derived from the predicted variances is bounded by
+    ``confidence_logvar_bound`` (in log-variance units) so a well-fitted sample
+    cannot inflate the token without limit.
     """
 
     def __init__(
@@ -24,14 +29,21 @@ class ScalePriorEncoder(nn.Module):
         hidden_dim: int = 128,
         descriptor_mean: torch.Tensor | None = None,
         descriptor_std: torch.Tensor | None = None,
+        confidence_logvar_bound: float = 6.0,
     ) -> None:
         super().__init__()
+        if not confidence_logvar_bound > 0:
+            raise ValueError("confidence_logvar_bound must be positive")
         mean = torch.zeros(6) if descriptor_mean is None else torch.as_tensor(descriptor_mean, dtype=torch.float32)
         std = torch.ones(6) if descriptor_std is None else torch.as_tensor(descriptor_std, dtype=torch.float32)
         if mean.numel() != 6 or std.numel() != 6:
             raise ValueError("Scale descriptor statistics must each contain six values")
         self.register_buffer("descriptor_mean", mean.reshape(6))
         self.register_buffer("descriptor_std", std.reshape(6).clamp_min(1.0e-6))
+        # Not part of the state dict: it only records whether the statistics
+        # were fitted from training-time out-of-fold predictions.
+        self.register_buffer("statistics_fitted", torch.zeros((), dtype=torch.bool), persistent=False)
+        self.confidence_half_width = 0.5 * float(confidence_logvar_bound)
         self.projection = nn.Sequential(
             nn.Linear(6, hidden_dim),
             nn.GELU(),
@@ -61,10 +73,32 @@ class ScalePriorEncoder(nn.Module):
             dim=1,
         )
 
+    def confidence(self, descriptor: torch.Tensor) -> torch.Tensor:
+        """Bounded confidence weight, one value per sample.
+
+        ``exp(-0.5 * logvar)`` is unbounded above, so with a log-variance floor
+        of ``-12`` a well-fitted sample would scale the token by ``exp(6)`` and
+        swamp the cross-attention keys.  Clamping the two confidence channels
+        to ``exp(+/-0.5 * confidence_logvar_bound)`` bounds the token magnitude
+        while keeping the ordering of the predictions.
+        """
+        upper = math.exp(self.confidence_half_width)
+        lower = math.exp(-self.confidence_half_width)
+        clamped = descriptor[:, 4:6].clamp(min=lower, max=upper)
+        return torch.sqrt((clamped[:, 0] * clamped[:, 1]).clamp_min(0.0))
+
     def forward(self, size_stats: torch.Tensor) -> torch.Tensor:
         descriptor = self.descriptor(size_stats)
+        if not bool(self.statistics_fitted):
+            warnings.warn(
+                "ScalePriorEncoder descriptor statistics were never fitted; "
+                "call set_descriptor_statistics() with training out-of-fold size "
+                "predictions, otherwise the descriptor is effectively unnormalised.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         normalized = (descriptor - self.descriptor_mean) / self.descriptor_std
-        confidence = torch.sqrt((descriptor[:, 4] * descriptor[:, 5]).clamp_min(0.0)).unsqueeze(1)
+        confidence = self.confidence(descriptor).unsqueeze(1)
         return confidence * self.projection(normalized)
 
     @torch.no_grad()
@@ -73,6 +107,7 @@ class ScalePriorEncoder(nn.Module):
         descriptor = self.descriptor(training_size_stats)
         self.descriptor_mean.copy_(descriptor.mean(0))
         self.descriptor_std.copy_(descriptor.std(0, correction=0).clamp_min(1.0e-6))
+        self.statistics_fitted.fill_(True)
 
 
 class PositionPriorEncoder(nn.Module):
