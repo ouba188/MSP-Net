@@ -74,6 +74,8 @@ class MSPNet(nn.Module):
             "band_weights": fused.band_weights,
             "routing": fused.routing,
             "null_mass": fused.null_mass,
+            "attention_per_head": fused.attention_per_head,
+            "null_mass_per_head": fused.null_mass_per_head,
             "visual_alignment": fused.visual_alignment,
             "prior_alignment": fused.prior_alignment,
             "source_names": fused.source_names,

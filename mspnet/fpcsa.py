@@ -23,6 +23,11 @@ class FPCSAOutput:
     visual_alignment: torch.Tensor | None
     prior_alignment: torch.Tensor | None
     source_names: tuple[str, ...]
+    # Reporting-only tensors.  ``attention`` and ``null_mass`` above are
+    # averaged over heads; these keep the head axis so head specialisation can
+    # be inspected (shape [B, heads, bands, sources] and [B, heads]).
+    attention_per_head: torch.Tensor | None = None
+    null_mass_per_head: torch.Tensor | None = None
 
 
 class FrequencyDecomposer(nn.Module):
@@ -128,12 +133,19 @@ class FPCSA(nn.Module):
         head_output = torch.einsum("bhns,bnshd->bnhd", attention, values)
         band_prior = self.output(head_output.reshape(batch, bands, dim))
         band_weights = self.band_score(tokens).squeeze(-1).softmax(-1)
+        # Re-normalise so the weights sum to exactly one in float32: the softmax
+        # of three logits sums to 1 +/- one ulp, and that residue leaks into
+        # ``1 - null_mass`` and breaks the null-only identity by ~1e-7.
+        band_weights = band_weights / band_weights.sum(-1, keepdim=True)
         prior_mix = (band_weights.unsqueeze(-1) * band_prior).sum(1)
         attention_mean = attention.mean(1)
         if "null" in names:
-            null_mass = (band_weights * attention_mean[:, :, names.index("null")]).sum(1, keepdim=True)
+            null_index = names.index("null")
+            null_mass = (band_weights * attention_mean[:, :, null_index]).sum(1, keepdim=True)
+            null_mass_per_head = (band_weights.unsqueeze(1) * attention[:, :, :, null_index]).sum(-1)
         else:
             null_mass = visual_feature.new_zeros(batch, 1)
+            null_mass_per_head = visual_feature.new_zeros(batch, self.num_heads)
         gamma, beta = self.film(prior_mix).chunk(2, -1)
         feature = self.residual_film(visual_feature, gamma, beta, null_mass)
         return_alignment = self.training if return_alignment is None else return_alignment
@@ -142,4 +154,5 @@ class FPCSA(nn.Module):
         return FPCSAOutput(feature=feature, attention=attention_mean, band_weights=band_weights,
                            routing=band_weights.unsqueeze(-1) * attention_mean, null_mass=null_mass,
                            prior_mix=prior_mix, frequency_tokens=tokens,
-                           visual_alignment=visual_alignment, prior_alignment=prior_alignment, source_names=names)
+                           visual_alignment=visual_alignment, prior_alignment=prior_alignment, source_names=names,
+                           attention_per_head=attention, null_mass_per_head=null_mass_per_head)

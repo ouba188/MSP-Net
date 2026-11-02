@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import torch
 import torch.nn.functional as F
 
@@ -22,12 +24,23 @@ def heteroscedastic_size_loss(
 
 
 def frequency_vca_loss(visual_alignment: torch.Tensor, prior_alignment: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
-    """Symmetric InfoNCE alignment between visual-frequency and prior embeddings."""
+    """Symmetric InfoNCE alignment between visual-frequency and prior embeddings.
+
+    Both inputs are expected to be L2-normalised already (the projection heads
+    normalise them); normalising again is a cheap no-op safety net.  The loss is
+    undefined for a single sample, where it warns instead of silently vanishing.
+    """
 
     if visual_alignment.shape != prior_alignment.shape:
         raise ValueError("visual and prior alignment tensors must have the same shape")
     batch = visual_alignment.shape[0]
     if batch < 2:
+        warnings.warn(
+            "frequency_vca_loss needs at least two samples per batch; returning 0. "
+            "Use drop_last=True if this is not intended.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return visual_alignment.new_zeros(())
     visual = F.normalize(visual_alignment, dim=-1)
     prior = F.normalize(prior_alignment, dim=-1)
