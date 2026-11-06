@@ -27,8 +27,8 @@ def frequency_vca_loss(visual_alignment: torch.Tensor, prior_alignment: torch.Te
     """Symmetric InfoNCE alignment between visual-frequency and prior embeddings.
 
     Both inputs are expected to be L2-normalised already (the projection heads
-    normalise them); normalising again is a cheap no-op safety net.  The loss is
-    undefined for a single sample, where it warns instead of silently vanishing.
+    normalise them); normalising again is a cheap no-op safety net.  For a single sample the loss degenerates to zero with no negative pair;
+    a warning makes that loss of training signal explicit.
     """
 
     if visual_alignment.shape != prior_alignment.shape:
@@ -37,7 +37,7 @@ def frequency_vca_loss(visual_alignment: torch.Tensor, prior_alignment: torch.Te
     if batch < 2:
         warnings.warn(
             "frequency_vca_loss needs at least two samples per batch; returning 0. "
-            "Use drop_last=True if this is not intended.",
+            "Merge a singleton tail batch into the preceding training batch.",
             RuntimeWarning,
             stacklevel=2,
         )

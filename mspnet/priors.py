@@ -40,9 +40,9 @@ class ScalePriorEncoder(nn.Module):
             raise ValueError("Scale descriptor statistics must each contain six values")
         self.register_buffer("descriptor_mean", mean.reshape(6))
         self.register_buffer("descriptor_std", std.reshape(6).clamp_min(1.0e-6))
-        # Not part of the state dict: it only records whether the statistics
-        # were fitted from training-time out-of-fold predictions.
-        self.register_buffer("statistics_fitted", torch.zeros((), dtype=torch.bool), persistent=False)
+        if (descriptor_mean is None) != (descriptor_std is None):
+            raise ValueError("Provide both descriptor mean and standard deviation")
+        self.register_buffer("statistics_fitted", torch.tensor(descriptor_mean is not None))
         self.confidence_half_width = 0.5 * float(confidence_logvar_bound)
         self.projection = nn.Sequential(
             nn.Linear(6, hidden_dim),
@@ -79,8 +79,8 @@ class ScalePriorEncoder(nn.Module):
         ``exp(-0.5 * logvar)`` is unbounded above, so with a log-variance floor
         of ``-12`` a well-fitted sample would scale the token by ``exp(6)`` and
         swamp the cross-attention keys.  Clamping the two confidence channels
-        to ``exp(+/-0.5 * confidence_logvar_bound)`` bounds the token magnitude
-        while keeping the ordering of the predictions.
+        to ``exp(+/-0.5 * confidence_logvar_bound)`` bounds this outer multiplier (not the learned token norm).
+        Clipping preserves weak ordering and introduces ties at saturation.
         """
         upper = math.exp(self.confidence_half_width)
         lower = math.exp(-self.confidence_half_width)

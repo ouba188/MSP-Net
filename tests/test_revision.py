@@ -262,12 +262,12 @@ class EvaluationTests(unittest.TestCase):
 
     def test_missing_std_is_not_invented(self):
         out = evaluation.evaluate(self.rows(), ['a','b'])
-        self.assertIsNone(out['summary']['m']['accuracy']['sample_std'])
+        self.assertIsNone(out['seed_summary']['m']['accuracy']['sample_std'])
         self.assertAlmostEqual(evaluation.summarize([70,80])['sample_std'], 50**.5)
 
     def test_lopo_aggregation(self):
         out = evaluation.evaluate(self.rows(), ['a','b'], 'lopo')
-        self.assertEqual(out['runs'][0]['port_macro']['accuracy'], 75.)
+        self.assertEqual(out['runs'][0]['port_summary']['accuracy']['mean'], 75.)
 
     def test_duplicate_and_group_leak_rejected(self):
         rows = self.rows()
@@ -283,13 +283,13 @@ class EvaluationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluation.evaluate(rows + other, ['a','b'])
 
-    def test_absent_classes_are_excluded_from_macro(self):
+    def test_macro_uses_fixed_class_set(self):
         rows = [dict(model='m', seed='42', sample_id=f's{i}', ship_group_id=f'g{i}',
                      port='small', fold='small', true_label='a', pred_label='a') for i in range(5)]
         score = evaluation.metrics(rows, ['a', 'b', 'c'])
         self.assertEqual(score['accuracy'], 100.)
-        self.assertEqual(score['macro_f1'], 100.)
-        self.assertEqual(score['macro_class_count'], 1)
+        self.assertAlmostEqual(score['macro_f1'], 100. / 3)
+        self.assertEqual(score['macro_class_count'], 3)
         self.assertEqual(score['absent_classes'], ['b', 'c'])
 
     def test_supported_but_never_predicted_class_still_scores_zero(self):
@@ -304,16 +304,15 @@ class EvaluationTests(unittest.TestCase):
         # -> f1 0. Macro therefore sits between the two, not at 100.
         self.assertAlmostEqual(score['macro_f1'], 100 * (2 * 4 / 9) / 2, places=6)
 
-    def test_lopo_cross_port_identity_rejected_and_recorded(self):
+    def test_lopo_cross_port_identity_recorded_not_assumed_leak(self):
         rows = [
             dict(model='m', seed='42', sample_id='s1', ship_group_id='g1', port='A', fold='A',
                  true_label='a', pred_label='a'),
             dict(model='m', seed='42', sample_id='s2', ship_group_id='g1', port='B', fold='B',
                  true_label='a', pred_label='a'),
         ]
-        with self.assertRaisesRegex(ValueError, 'spans multiple target ports'):
-            evaluation.evaluate(rows, ['a', 'b'], 'lopo')
-        out = evaluation.evaluate(rows, ['a', 'b'], 'lopo', allow_identity_overlap=True)
+        out = evaluation.evaluate(rows, ['a', 'b'], 'lopo')
+        self.assertFalse(out['runs'][0]['training_identity_verified'])
         self.assertEqual(out['runs'][0]['identity_overlap']['groups'], 1)
         # The same vessel is harmless in the pooled protocol, where the split
         # unit is the outer fold rather than the port.

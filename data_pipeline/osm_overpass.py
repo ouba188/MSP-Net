@@ -28,7 +28,12 @@ def make_query(bbox: tuple[float, float, float, float], timeout: int) -> str:
   nwr[\"man_made\"~\"quay|pier|breakwater|crane|silo|storage_tank|works\"]({box});
   nwr[\"harbour\"]({box});
   nwr[\"seamark:type\"]({box});
-  way[\"waterway\"~\"river|canal|fairway\"]({box});
+  nwr[\"waterway\"~\"^(river|canal|fairway|dock)$\"]({box});
+  nwr[\"landuse\"=\"industrial\"]({box});
+  nwr[\"industrial\"~\"^(port|oil)$\"]({box});
+  nwr[\"pipeline\"]({box});
+  nwr[\"substance\"=\"oil\"]({box});
+  nwr[\"man_made\"=\"pipeline\"]({box});
   way[\"natural\"=\"coastline\"]({box});
 );
 out body geom;"""

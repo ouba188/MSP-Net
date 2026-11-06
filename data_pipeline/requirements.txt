@@ -2,3 +2,6 @@ asf_search>=6.0
 pandas>=2.0
 Pillow>=10.0
 requests>=2.31
+shapely>=2.1
+pyproj>=3.6
+osm2geojson>=0.3.1

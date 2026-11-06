@@ -33,6 +33,8 @@ def build_three_channel(
 
     vv = _as_bchw(vv).float()
     vh = _as_bchw(vh).float()
+    if vv.shape[1] != 1 or vh.shape[1] != 1:
+        raise ValueError("Each polarization must have one channel")
     if vv.shape != vh.shape:
         raise ValueError(f"VV and VH shapes must match, got {vv.shape} and {vh.shape}")
 
@@ -55,7 +57,7 @@ def load_png_pair(
     """Load a VV/VH PNG pair and return a single ``1 x 3 x H x W`` tensor.
 
     PNG chips in the companion SAR-AIS release are 8-bit exports.  When
-    ``normalize_uint8`` is true, values above one are divided by 255 before
+    ``normalize_uint8`` is true, every value is divided by 255 before
     log compression.  Match this convention to the preprocessing used for a
     particular experiment when loading other SAR products.
     """
@@ -67,7 +69,7 @@ def load_png_pair(
         # PIL hands back a read-only buffer; copy so the tensor is writable and
         # torch stops warning on every call.
         tensor = torch.from_numpy(np.array(array, dtype=np.float32, copy=True))
-        if normalize_uint8 and float(tensor.max()) > 1.0:
+        if normalize_uint8:
             tensor = tensor / 255.0
         return tensor
 

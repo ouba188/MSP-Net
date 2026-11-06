@@ -23,6 +23,7 @@ class FPCSAOutput:
     visual_alignment: torch.Tensor | None
     prior_alignment: torch.Tensor | None
     source_names: tuple[str, ...]
+    band_names: tuple[str, ...] = ("low", "mid", "high")
     # Reporting-only tensors.  ``attention`` and ``null_mass`` above are
     # averaged over heads; these keep the head axis so head specialisation can
     # be inspected (shape [B, heads, bands, sources] and [B, heads]).
@@ -35,12 +36,17 @@ class FrequencyDecomposer(nn.Module):
     bands = ("low", "mid", "high")
     modes = ("frequency", "gap_repeated", "spatial_statistics", "full_spectrum_repeated")
 
-    def __init__(self, channels, token_dim, rho1=0.22, rho2=0.55, query_mode="frequency"):
+    def __init__(self, channels, token_dim, rho1=0.22, rho2=0.55, query_mode="frequency", active_bands=None):
         super().__init__()
         if not 0 < rho1 < rho2 < 1:
             raise ValueError("Require 0 < rho1 < rho2 < 1")
         if query_mode not in self.modes:
             raise ValueError(f"query_mode must be one of {self.modes}")
+        selected = self.bands if active_bands is None else tuple(active_bands)
+        if not selected or len(set(selected)) != len(selected) or any(b not in self.bands for b in selected):
+            raise ValueError("active_bands must contain unique low/mid/high names")
+        self.active_bands = tuple(b for b in self.bands if b in selected)
+        self.band_indices = tuple(self.bands.index(b) for b in self.active_bands)
         self.rho1, self.rho2, self.query_mode = rho1, rho2, query_mode
         self.projection = nn.Linear(channels, token_dim)
 
@@ -70,7 +76,8 @@ class FrequencyDecomposer(nn.Module):
         return torch.einsum("bchw,nhw->bnc", magnitude, masks.float()) / counts[None, :, None]
 
     def forward(self, feature_map):
-        return self.projection(self.descriptors(feature_map).to(feature_map.dtype))
+        descriptors = self.descriptors(feature_map)[:, self.band_indices, :]
+        return self.projection(descriptors.to(feature_map.dtype))
 
 
 class FPCSA(nn.Module):
@@ -79,7 +86,7 @@ class FPCSA(nn.Module):
     def __init__(self, feature_channels=256, token_dim=512, hidden_dim=128,
                  num_heads=4, temperature=0.8, rho1=0.22, rho2=0.55,
                  contrast_dim=128, query_mode="frequency", active_sources=None,
-                 compatibility_bias=True, source_gating=True):
+                 compatibility_bias=True, source_gating=True, active_bands=None):
         super().__init__()
         if token_dim % num_heads or temperature <= 0:
             raise ValueError("Require divisible head dimensions and positive temperature")
@@ -90,7 +97,8 @@ class FPCSA(nn.Module):
         self.token_dim, self.num_heads = token_dim, num_heads
         self.head_dim, self.temperature = token_dim // num_heads, temperature
         self.compatibility_bias, self.source_gating = compatibility_bias, source_gating
-        self.frequency = FrequencyDecomposer(feature_channels, token_dim, rho1, rho2, query_mode)
+        self.frequency = FrequencyDecomposer(feature_channels, token_dim, rho1, rho2, query_mode, active_bands)
+        self.band_names = self.frequency.active_bands
         self.query = nn.Linear(token_dim, token_dim)
         self.key, self.value = nn.Linear(token_dim, token_dim, bias=False), nn.Linear(token_dim, token_dim, bias=False)
         self.output = nn.Linear(token_dim, token_dim)
@@ -100,7 +108,7 @@ class FPCSA(nn.Module):
         self.film = nn.Sequential(nn.Linear(token_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, 2 * token_dim))
         nn.init.zeros_(self.film[-1].weight)
         nn.init.zeros_(self.film[-1].bias)
-        self.visual_projection = nn.Sequential(nn.Linear(3 * token_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, contrast_dim))
+        self.visual_projection = nn.Sequential(nn.Linear(len(self.frequency.active_bands) * token_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, contrast_dim))
         self.prior_projection = nn.Sequential(nn.Linear(token_dim, hidden_dim), nn.GELU(), nn.Linear(hidden_dim, contrast_dim))
 
     @staticmethod
@@ -154,5 +162,5 @@ class FPCSA(nn.Module):
         return FPCSAOutput(feature=feature, attention=attention_mean, band_weights=band_weights,
                            routing=band_weights.unsqueeze(-1) * attention_mean, null_mass=null_mass,
                            prior_mix=prior_mix, frequency_tokens=tokens,
-                           visual_alignment=visual_alignment, prior_alignment=prior_alignment, source_names=names,
+                           visual_alignment=visual_alignment, prior_alignment=prior_alignment, source_names=names, band_names=self.band_names,
                            attention_per_head=attention, null_mass_per_head=null_mass_per_head)

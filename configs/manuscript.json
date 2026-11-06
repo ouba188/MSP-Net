@@ -1,0 +1,42 @@
+{
+  "protocol": "all-port",
+  "seed": 42,
+  "split_seed": 42,
+  "folds": 5,
+  "size_epochs": 100,
+  "size_learning_rate": 0.0001,
+  "size_weight_decay": 0.0001,
+  "size_batch_size": 32,
+  "epochs": 220,
+  "patience": 130,
+  "learning_rate": 2e-05,
+  "minimum_learning_rate": 1e-06,
+  "weight_decay": 0.0001,
+  "batch_size": 8,
+  "label_smoothing": 0.08,
+  "lambda_v": 0.0005,
+  "contrastive_temperature": 0.5,
+  "gradient_norm": 1.0,
+  "model_name": "MSP-Net",
+  "device": "cpu",
+  "fusion_options": {
+    "fusion_kind": "fpcsa",
+    "active_bands": [
+      "low",
+      "mid",
+      "high"
+    ],
+    "active_sources": [
+      "scale",
+      "position",
+      "osm",
+      "null"
+    ],
+    "temperature": 0.8,
+    "num_heads": 4,
+    "rho1": 0.22,
+    "rho2": 0.55,
+    "hidden_dim": 128,
+    "contrast_dim": 128
+  }
+}
