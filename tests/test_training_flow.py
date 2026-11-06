@@ -1,4 +1,3 @@
-"""Behavior checks for the executable nested protocol, using tiny models."""
 import json
 import tempfile
 import unittest

@@ -21,8 +21,6 @@ def rows_for_units(units):
 
 class EvaluationProtocolTests(unittest.TestCase):
     def test_five_fold_mean_is_not_pooled_accuracy(self):
-        # Scores [100,0,100,0,100] with unequal fold sizes. Hand calculation:
-        # fold mean = 60, sample variance = 12000/4; pooled = 4/11.
         rows = rows_for_units([("F1", True, 1), ("F2", False, 3),
                               ("F3", True, 2), ("F4", False, 4), ("F5", True, 1)])
         run = evaluation.evaluate(rows, ["a", "b"], expected_folds=5)["runs"][0]
@@ -30,7 +28,7 @@ class EvaluationProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(run["fold_summary"]["accuracy"]["sample_std"], math.sqrt(3000))
         self.assertEqual(run["fold_summary"]["accuracy"]["n_folds"], 5)
         self.assertAlmostEqual(run["pooled"]["accuracy"], 400 / 11)
-        # Fixed two-class denominator: a perfect all-a fold has macro F1=50.
+
         self.assertEqual(run["fold_summary"]["macro_f1"]["mean"], 30)
         self.assertEqual(set(run["fold_summary"]), set(evaluation.SCORE_KEYS))
 
@@ -55,9 +53,6 @@ class EvaluationProtocolTests(unittest.TestCase):
         self.assertEqual(out["runs"][1]["fold_summary"]["accuracy"]["sample_std"], 0)
 
     def test_lopo_repeat_then_port_aggregation_keeps_sd_axes_separate(self):
-        # Seed 42: A=0, B=100; seed 43: A=50, B=100.
-        # Port means are A=25 and B=100; their sample SD=sqrt(2812.5).
-        # The seed-level port means are 50 and 75; their SD=sqrt(312.5).
         first = rows_for_units([("A", False, 4), ("B", True, 4)])
         second = [dict(row, seed="43", pred_label="a" if
                        row["port"] == "B" or int(row["sample_id"]) < 2 else "b")
@@ -77,7 +72,7 @@ class EvaluationProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(combined["sample_std"], math.sqrt(2812.5))
         self.assertAlmostEqual(out["seed_summary"]["m"]["accuracy"]["sample_std"], math.sqrt(312.5))
         self.assertAlmostEqual(out["runs"][0]["port_summary"]["accuracy"]["sample_std"], math.sqrt(5000))
-        # Mean of per-seed F1 is not F1 after pooling repeated predictions.
+
         self.assertAlmostEqual(summary["ports"]["A"]["macro_f1"]["mean"], 50 / 3)
 
     def test_absent_classes_keep_fixed_macro_denominator(self):

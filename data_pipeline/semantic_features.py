@@ -1,14 +1,3 @@
-"""Fixed, prospective OSM feature schema for the revised manuscript.
-
-GeoJSON must contain WGS84 geometries and OSM tags in feature properties
-(either flat or under ``tags``). Use a geometry-aware converter for Overpass
-relations: ``python -m data_pipeline.semantic_features convert-overpass
---input overpass.json --output port.geojson`` requires osm2geojson.
-
-Extraction keeps 68 continuous columns and 5 availability flags separate.
-Only distance is log1p-transformed here. Fit all standardization on training
-samples in mspnet.training. This schema is not a claim about archived runs.
-"""
 from __future__ import annotations
 
 import argparse
@@ -36,7 +25,6 @@ AVAILABILITY_INDEX = np.array([i for i in range(len(GROUPS)) for _ in range(13)]
 
 
 def semantic_groups(tags):
-    """An object may belong to multiple groups; groups are not class labels."""
     result = []
     if tags.get("natural") == "coastline" or tags.get("man_made") == "breakwater":
         result.append(0)
@@ -56,7 +44,6 @@ def semantic_groups(tags):
 
 
 def port_transformer(reference_lonlat):
-    """Choose one UTM CRS from the fixed port reference, never per vessel."""
     lon, lat = map(float, reference_lonlat)
     if not (-180 <= lon <= 180 and -80 <= lat <= 84):
         raise ValueError("Port reference must be a valid WGS84 position within UTM latitude bounds")
@@ -74,17 +61,6 @@ def geometry_parts(geometry, kinds):
 
 
 def extract_semantic_features(geojson, lonlat, reference_lonlat):
-    """Return raw local coordinates, OSM columns, flags, and column mapping.
-
-    For each vessel, a semantic group is available iff at least one of its
-    mapped objects intersects the 5 km neighborhood. Missing groups have 13
-    zeros and flag 0; no imputed physical distance is inferred. Nearest
-    distances are to geometry (not centroid), restricted to that neighborhood.
-    Counts count feature objects once, including non-point geometries.
-    Areas/line lengths are unioned to avoid overlapping geometry double counts.
-    Polygon boundaries do not contribute to line density. Overlay unions use
-    a 1 mm precision grid to remove projection roundoff at shared segments.
-    """
     if geojson.get("type") != "FeatureCollection":
         raise ValueError("Expected a standard WGS84 GeoJSON FeatureCollection")
     lonlat = np.asarray(lonlat, dtype=np.float64)
@@ -101,8 +77,7 @@ def extract_semantic_features(geojson, lonlat, reference_lonlat):
     seen_ids = set()
     for feature in geojson.get("features", []):
         properties = feature.get("properties") or {}
-        # Standard converters preserve feature ids; repeated identical OSM
-        # objects from merged exports must not inflate object counts.
+
         feature_id = feature.get("id")
         if feature_id is None and "type" in properties and "id" in properties:
             feature_id = (properties["type"], properties["id"])
@@ -156,7 +131,6 @@ def extract_semantic_features(geojson, lonlat, reference_lonlat):
 
 
 def convert_overpass(payload):
-    """Delegate way/relation reconstruction to the explicit optional dependency."""
     try:
         from osm2geojson import json2geojson
     except ImportError as exc:
@@ -168,7 +142,7 @@ def convert_overpass(payload):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Fixed, prospective OSM feature schema for the revised manuscript.')
     commands = parser.add_subparsers(dest="command", required=True)
     convert = commands.add_parser("convert-overpass")
     convert.add_argument("--input", type=Path, required=True)

@@ -1,14 +1,3 @@
-"""Report fold/port mean and sample SD from held-out predictions.
-
-CSV columns: model, seed, sample_id, ship_group_id, port, fold,
-true_label, pred_label. One prediction per sample/model/seed is required.
-All-port scores average held-out folds. LOPO reports each port across seeds,
-then averages those port means across ports. Per-run port summaries and the
-separate seed summary retain their own axes. Pooled metrics are diagnostic.
-Optional identity-splits JSON is a list of records with model, seed, split,
-train_groups, validation_groups, test_groups. Split is fold (all-port) or port
-(LOPO). No run is generated or simulated by this tool.
-"""
 from __future__ import annotations
 import argparse
 import csv
@@ -38,8 +27,7 @@ def metrics(rows, classes):
         actual, predicted = sum(confusion[i]), sum(row[i] for row in confusion)
         if actual == 0 and predicted == 0:
             absent.append(classes[i])
-        # The manuscript fixes the macro denominator to the declared classes.
-        # Undefined class precision/recall/F1 use zero, including absent classes.
+
         precision.append(tp / predicted if predicted else 0.0)
         recall.append(tp / actual if actual else 0.0)
         f1.append(2 * tp / (actual + predicted) if actual + predicted else 0.0)
@@ -123,8 +111,6 @@ def evaluate(rows, classes, protocol="all-port", identity_splits=None, expected_
         if protocol == "lopo":
             overlapping = {g: sorted(p) for g, p in group_ports.items() if len(p) > 1}
             if overlapping:
-                # Prediction CSVs cannot establish train/test leakage. Source
-                # training can exclude each target vessel even across ports.
                 record["identity_overlap"] = {"groups": len(overlapping),
                     "examples": dict(list(overlapping.items())[:5]),
                     "meaning": "cross-target-port overlap; not a train/test leakage verdict"}
@@ -141,9 +127,6 @@ def evaluate(rows, classes, protocol="all-port", identity_splits=None, expected_
     output["seed_summary"] = {model: {k: summarize(v, "seeds") for k, v in scores.items()}
                               for model, scores in aggregated.items()}
     if protocol == "lopo":
-        # The manuscript reports each target port over repeated seeds, then
-        # computes the aggregate row over those port-level means. Its SD is
-        # across port means, not across seeds or all port/seed observations.
         by_model_port = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
         for record in output["runs"]:
             for port, score in record["ports"].items():
@@ -170,7 +153,7 @@ def assert_identity_disjoint(train_groups, validation_groups, test_groups):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Report fold/port mean and sample SD from held-out predictions.')
     parser.add_argument("predictions", type=Path)
     parser.add_argument("--classes", nargs="+", required=True)
     parser.add_argument("--protocol", choices=("all-port", "lopo"), default="all-port")

@@ -1,5 +1,3 @@
-"""Encoders for the scale, position, OSM, and null conditional priors."""
-
 from __future__ import annotations
 
 import math
@@ -10,19 +8,6 @@ from torch import nn
 
 
 class ScalePriorEncoder(nn.Module):
-    """Encode frozen size-estimator predictions as a physical scale token.
-
-    ``size_stats`` contains ``[mu_L, mu_W, logvar_L, logvar_W]`` where the
-    first two values are log-domain length/width predictions.  The estimator
-    itself is intentionally kept outside this module: Stage 1 can be trained
-    and cross-fitted independently, and this encoder consumes its frozen
-    predictions in Stage 2.
-
-    The confidence weight derived from the predicted variances is bounded by
-    ``confidence_logvar_bound`` (in log-variance units) so a well-fitted sample
-    cannot inflate the token without limit.
-    """
-
     def __init__(
         self,
         token_dim: int = 512,
@@ -74,14 +59,6 @@ class ScalePriorEncoder(nn.Module):
         )
 
     def confidence(self, descriptor: torch.Tensor) -> torch.Tensor:
-        """Bounded confidence weight, one value per sample.
-
-        ``exp(-0.5 * logvar)`` is unbounded above, so with a log-variance floor
-        of ``-12`` a well-fitted sample would scale the token by ``exp(6)`` and
-        swamp the cross-attention keys.  Clamping the two confidence channels
-        to ``exp(+/-0.5 * confidence_logvar_bound)`` bounds this outer multiplier (not the learned token norm).
-        Clipping preserves weak ordering and introduces ties at saturation.
-        """
         upper = math.exp(self.confidence_half_width)
         lower = math.exp(-self.confidence_half_width)
         clamped = descriptor[:, 4:6].clamp(min=lower, max=upper)
@@ -103,7 +80,6 @@ class ScalePriorEncoder(nn.Module):
 
     @torch.no_grad()
     def set_descriptor_statistics(self, training_size_stats: torch.Tensor) -> None:
-        """Fit exclusively on source/training out-of-fold size predictions."""
         descriptor = self.descriptor(training_size_stats)
         self.descriptor_mean.copy_(descriptor.mean(0))
         self.descriptor_std.copy_(descriptor.std(0, correction=0).clamp_min(1.0e-6))
@@ -111,8 +87,6 @@ class ScalePriorEncoder(nn.Module):
 
 
 class PositionPriorEncoder(nn.Module):
-    """Encode global lon/lat and port-local relative position."""
-
     def __init__(self, token_dim: int = 512, hidden_dim: int = 128, harmonics: tuple[int, ...] = (1, 2, 4)) -> None:
         super().__init__()
         self.harmonics = tuple(int(k) for k in harmonics)
@@ -140,8 +114,6 @@ class PositionPriorEncoder(nn.Module):
 
 
 class OSMPriorEncoder(nn.Module):
-    """Encode numeric OSM/seamark features with a learned channel gate."""
-
     def __init__(self, feature_dim: int, token_dim: int = 512, hidden_dim: int = 128, availability_dim: int = 0) -> None:
         super().__init__()
         self.feature_dim = int(feature_dim)
@@ -167,8 +139,6 @@ class OSMPriorEncoder(nn.Module):
 
 
 class NullPrior(nn.Module):
-    """Learnable null source used when external priors should be suppressed."""
-
     def __init__(self, token_dim: int = 512) -> None:
         super().__init__()
         self.token = nn.Parameter(torch.zeros(1, token_dim))
@@ -176,4 +146,3 @@ class NullPrior(nn.Module):
 
     def forward(self, batch_size: int) -> torch.Tensor:
         return self.token.expand(int(batch_size), -1)
-

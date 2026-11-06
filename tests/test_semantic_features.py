@@ -65,7 +65,7 @@ class SemanticFeatureTests(unittest.TestCase):
     def test_polygon_union_avoids_overlap_and_boundaries_are_not_lines(self):
         features = [self.feature(box(0, 0, 100, 100), {"landuse": "industrial"}, "way/1"),
                     self.feature(box(50, 0, 150, 100), {"industrial": "port"}, "way/2")]
-        # A duplicated export id is still one mapped object.
+
         result = self.extract(features + [features[0]])
         self.assertEqual(self.column(result, "port_industrial.200m.count"), 2)
         self.assertAlmostEqual(self.column(result, "port_industrial.200m.area_ratio"),

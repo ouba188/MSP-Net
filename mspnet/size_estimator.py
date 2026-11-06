@@ -1,4 +1,3 @@
-"""Independent Stage-1 size regression; never a class-label input path."""
 from __future__ import annotations
 
 import torch
@@ -8,11 +7,6 @@ from torchvision.models import resnet18
 
 
 class SARSizeEstimator(nn.Module):
-    """Predict log(1+length/width) means and bounded log variances.
-
-    Instantiate separately from MSPNet. Fit using only the appropriate source
-    identity groups. Cross-fit before fitting scale descriptor statistics.
-    """
     def __init__(self, logvar_bounds: tuple[float, float] = (-12.0, 12.0)) -> None:
         super().__init__()
         if not logvar_bounds[0] < logvar_bounds[1]:

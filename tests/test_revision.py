@@ -56,9 +56,7 @@ class ArchitectureTests(unittest.TestCase):
         torch.nn.init.normal_(model.film[-1].bias)
         visual = torch.randn(2, 16)
         out = model(torch.randn(2, 4, 14, 14), visual, {'null': torch.randn(2, 16)})
-        # Softmax of three logits sums to 1 +/- one ulp; the encoder renormalises
-        # band_weights, so ``1 - null_mass`` is either exactly 0 or within a
-        # single float32 epsilon and the residual FiLM term cannot move.
+
         self.assertLessEqual((1 - out.null_mass).abs().max().item(), 2 * torch.finfo(visual.dtype).eps)
         self.assertTrue(torch.allclose(out.feature, visual, atol=1e-6))
         self.assertTrue(torch.allclose(out.null_mass, torch.ones(2, 1)))
@@ -79,15 +77,13 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(tuple(out.null_mass_per_head.shape), (2, 4))
         self.assertTrue(torch.allclose(out.attention_per_head.mean(1), out.attention, atol=1e-6))
         self.assertTrue(torch.allclose(out.null_mass_per_head.mean(1, keepdim=True), out.null_mass, atol=1e-6))
-        # Heads must not be collapsed inside the attention: at least one head
-        # pair must differ, otherwise the head axis would be cosmetic.
+
         self.assertFalse(torch.allclose(out.attention_per_head[:, 0], out.attention_per_head[:, 1]))
 
     def test_full_forward_backward_and_frozen_size_inputs(self):
         model = MSPNet(8)
         size = torch.tensor([[5., 3., 0., 0.], [5.2, 3.1, .2, .1]], requires_grad=True)
-        # The scale descriptor statistics must be fitted on out-of-fold training
-        # predictions; without this call the encoder warns.
+
         model.scale_encoder.set_descriptor_statistics(size.detach())
         out = model(torch.rand(2, 3, 224, 224), size, torch.rand(2, 2), torch.rand(2, 3), torch.rand(2, 8))
         self.assertEqual(tuple(out['attention'].shape), (2, 3, 4))
@@ -182,7 +178,7 @@ class ArchitectureTests(unittest.TestCase):
             module.route.bias.fill_(torch.log(torch.tensor(3.)).item())
             module.output.weight.copy_(torch.eye(4))
         actual = module(torch.tensor([[120., 30.]]), torch.zeros(1, 3))
-        # alpha=3/4: (3/4)*2 + (1/4)*(-2) = 1 in every channel.
+
         self.assertTrue(torch.allclose(actual, torch.ones(1, 4)))
 
     def test_size_branch_independent_positive_and_finite(self):
@@ -196,7 +192,7 @@ class ArchitectureTests(unittest.TestCase):
     def test_scale_confidence_is_bounded(self):
         encoder = ScalePriorEncoder(token_dim=32, confidence_logvar_bound=6.0)
         encoder.set_descriptor_statistics(torch.randn(32, 4))
-        bound = math.exp(3.0)  # exp(+/- 0.5 * 6) in each confidence channel
+        bound = math.exp(3.0)
         confidence = {}
         for logvar in (-12.0, -6.0, 0.0, 3.0, 12.0):
             stats = torch.tensor([[5.0, 3.0, logvar, logvar]])
@@ -206,10 +202,10 @@ class ArchitectureTests(unittest.TestCase):
             self.assertGreaterEqual(value, 1.0 / bound * (1 - 1e-6))
             token = encoder(stats)
             self.assertTrue(torch.isfinite(token).all())
-        # Unclamped, logvar=-12 would give exp(6)=403; the bound caps it at exp(3).
+
         self.assertAlmostEqual(confidence[-12.0], bound, places=5)
         self.assertAlmostEqual(confidence[-6.0], bound, places=5)
-        # Ordering is preserved: lower predicted variance never means less weight.
+
         ordered = [confidence[v] for v in (-12.0, -6.0, 0.0, 3.0, 12.0)]
         self.assertEqual(ordered, sorted(ordered, reverse=True))
 
@@ -300,8 +296,7 @@ class EvaluationTests(unittest.TestCase):
         score = evaluation.metrics(rows, ['a', 'b'])
         self.assertEqual(score['macro_class_count'], 2)
         self.assertEqual(score['absent_classes'], [])
-        # Class a: precision 4/5, recall 1 -> f1 0.889. Class b: never predicted
-        # -> f1 0. Macro therefore sits between the two, not at 100.
+
         self.assertAlmostEqual(score['macro_f1'], 100 * (2 * 4 / 9) / 2, places=6)
 
     def test_lopo_cross_port_identity_recorded_not_assumed_leak(self):
@@ -314,8 +309,7 @@ class EvaluationTests(unittest.TestCase):
         out = evaluation.evaluate(rows, ['a', 'b'], 'lopo')
         self.assertFalse(out['runs'][0]['training_identity_verified'])
         self.assertEqual(out['runs'][0]['identity_overlap']['groups'], 1)
-        # The same vessel is harmless in the pooled protocol, where the split
-        # unit is the outer fold rather than the port.
+
         pooled = [dict(row, fold='F1') for row in rows]
         self.assertNotIn('identity_overlap', evaluation.evaluate(pooled, ['a', 'b'])['runs'][0])
 

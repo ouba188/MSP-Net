@@ -1,22 +1,3 @@
-"""Executable, identity-disjoint two-stage training for the manuscript.
-
-Prepared NPZ contract (no raw AIS or unprocessed SAR is inferred here):
-  sar: float32 [N,3,H,W], already log-compressed/contrast-constructed/resized;
-  lonlat: degrees [N,2]; local_position: unstandardized port-relative UTM [N,3];
-  osm: [N,D] continuous features, distance log1p/density/coverage already applied;
-  osm_availability: [N,A] binary; osm_availability_index: [D], column-to-flag
-    mapping (-1 means always available). Missing continuous values are zero.
-  osm_feature_names / osm_availability_names: fixed ordered Unicode columns;
-  labels: integer class indices; class_names: ordered Unicode class names;
-  size_targets: AIS length/width in metres [N,2]; sample_ids/group_ids/ports: [N];
-  preprocessing_json: scalar JSON string recording the actual SAR/geographic
-    preparation, including intensity scale and port reference coordinates.
-
-Classifier monitoring groups are separated BEFORE size fitting. Only update
-groups supply size supervision or fitted statistics. No target labels select
-epochs. Defaults for stage one are a runnable configuration, not recovered
-historical experiment records. The command never claims to reproduce a score.
-"""
 from __future__ import annotations
 
 import csv
@@ -255,8 +236,7 @@ def train_classifier(data, update, validation, size_stats, config, factory, dire
         with torch.no_grad():
             for ids in _batches(validation, config.batch_size):
                 output = _forward(model, data, ids, size_stats, local, osm, config.device, False)
-                # Classification CE selects checkpoints; contrastive batches do
-                # not define a stable per-sample validation objective.
+
                 loss = F.cross_entropy(output["logits"], torch.as_tensor(data.labels[ids], dtype=torch.long, device=config.device),
                                        label_smoothing=config.label_smoothing, reduction="sum")
                 validation_loss += loss.item()
@@ -305,7 +285,7 @@ def run_protocol(data, config, output_dir, classifier_factory=MSPNet, size_facto
         partition = {name: ids.tolist() for name, ids in (("update", update), ("validation", validation), ("test", test))}
         partition.update(split=split, sample_ids={name: data.sample_ids[ids].tolist() for name, ids in
                                                 (("update", update), ("validation", validation), ("test", test))})
-        # All three sets must be separated before ANY supervised size fitting.
+
         group_sets = [set(data.group_ids[ids]) for ids in (update, validation, test)]
         if any(group_sets[i] & group_sets[j] for i in range(3) for j in range(i + 1, 3)):
             raise ValueError("Identity overlap between update/validation/test")
@@ -372,7 +352,6 @@ def run_protocol(data, config, output_dir, classifier_factory=MSPNet, size_facto
 
 
 def summarize_size_errors(rows):
-    """Compute metre errors per prediction observation, separately by view."""
     errors = np.array([[r["pred_length_m"] - r["true_length_m"],
                        r["pred_width_m"] - r["true_width_m"]] for r in rows])
 

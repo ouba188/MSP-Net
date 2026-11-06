@@ -1,8 +1,3 @@
-"""Manuscript-aligned frequency-conditioned prior cross-attention.
-
-This revision is not checkpoint-compatible with the September core release.
-Historical performance does not validate the revised architecture.
-"""
 from __future__ import annotations
 import math
 from dataclasses import dataclass
@@ -24,15 +19,12 @@ class FPCSAOutput:
     prior_alignment: torch.Tensor | None
     source_names: tuple[str, ...]
     band_names: tuple[str, ...] = ("low", "mid", "high")
-    # Reporting-only tensors.  ``attention`` and ``null_mass`` above are
-    # averaged over heads; these keep the head axis so head specialisation can
-    # be inspected (shape [B, heads, bands, sources] and [B, heads]).
+
     attention_per_head: torch.Tensor | None = None
     null_mass_per_head: torch.Tensor | None = None
 
 
 class FrequencyDecomposer(nn.Module):
-    """Three descriptors and a shared affine projection; parameter-matched controls."""
     bands = ("low", "mid", "high")
     modes = ("frequency", "gap_repeated", "spatial_statistics", "full_spectrum_repeated")
 
@@ -136,14 +128,12 @@ class FPCSA(nn.Module):
         attention = logits.softmax(-1)
         values = self.value(source).unsqueeze(1).expand(-1, bands, -1, -1)
         gates = self.source_gate(torch.cat((band, prior), -1)) if self.source_gating else torch.ones_like(values)
-        # All four sources have learned values; null mass scales residual FiLM.
+
         values = (values * gates).reshape(batch, bands, len(names), self.num_heads, self.head_dim)
         head_output = torch.einsum("bhns,bnshd->bnhd", attention, values)
         band_prior = self.output(head_output.reshape(batch, bands, dim))
         band_weights = self.band_score(tokens).squeeze(-1).softmax(-1)
-        # Re-normalise so the weights sum to exactly one in float32: the softmax
-        # of three logits sums to 1 +/- one ulp, and that residue leaks into
-        # ``1 - null_mass`` and breaks the null-only identity by ~1e-7.
+
         band_weights = band_weights / band_weights.sum(-1, keepdim=True)
         prior_mix = (band_weights.unsqueeze(-1) * band_prior).sum(1)
         attention_mean = attention.mean(1)

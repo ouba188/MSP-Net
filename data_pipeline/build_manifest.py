@@ -1,5 +1,3 @@
-"""Build and validate a relative-path manifest for prepared dual-pol chips."""
-
 from __future__ import annotations
 
 import argparse
@@ -63,7 +61,7 @@ def image_size(path: Path) -> tuple[int, int]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Build and validate a relative-path manifest for prepared dual-pol chips.')
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -188,4 +186,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

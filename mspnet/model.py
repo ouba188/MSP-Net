@@ -1,5 +1,3 @@
-"""MSP-Net classification path."""
-
 from __future__ import annotations
 
 import torch
@@ -27,13 +25,6 @@ class ResNet18VisualBackbone(nn.Module):
 
 
 class MSPNet(nn.Module):
-    """Core MSP-Net classifier.
-
-    The Stage-1 size estimator is intentionally external.  ``size_stats`` are
-    its frozen predictions ``[mu_L, mu_W, logvar_L, logvar_W]`` generated with
-    the outer-fold/internal-cross-fitting protocol described in the paper.
-    """
-
     def __init__(self, osm_dim: int, num_classes: int = 3, osm_availability_dim: int = 0, token_dim: int = 512, fusion_kind: str = "fpcsa", **fusion_options) -> None:
         super().__init__()
         if token_dim != 512:
@@ -117,4 +108,3 @@ class MSPNet(nn.Module):
             "source_names": fused.source_names,
             "band_names": fused.band_names,
         }
-

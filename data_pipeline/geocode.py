@@ -1,5 +1,3 @@
-"""Rate-limited, cached geocoding for a small place-name CSV."""
-
 from __future__ import annotations
 
 import argparse
@@ -67,7 +65,7 @@ def write_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) ->
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Rate-limited, cached geocoding for a small place-name CSV.')
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--query-column", default="query")
@@ -124,4 +122,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,5 +1,3 @@
-"""Fetch a bounded set of OSM semantic objects for a port area."""
-
 from __future__ import annotations
 
 import argparse
@@ -40,7 +38,7 @@ out body geom;"""
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Fetch a bounded set of OSM semantic objects for a port area.')
     parser.add_argument("--bbox", type=parse_bbox, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--endpoint", default="https://overpass-api.de/api/interpreter")
@@ -79,4 +77,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

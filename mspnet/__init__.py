@@ -1,5 +1,3 @@
-"""Core MSP-Net components accompanying the manuscript."""
-
 from .fpcsa import FPCSA, FPCSAOutput
 from .losses import frequency_vca_loss, heteroscedastic_size_loss, mspnet_loss
 from .model import MSPNet
@@ -22,4 +20,3 @@ __all__ = [
     "heteroscedastic_size_loss",
     "mspnet_loss",
 ]
-

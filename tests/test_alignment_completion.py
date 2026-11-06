@@ -40,7 +40,7 @@ class AlignmentCompletionTests(unittest.TestCase):
             actual=b(stats)
         self.assertFalse(caught)
         self.assertTrue(torch.equal(actual,a(stats)))
-        # Descriptor c is NOT replaced by its clipped outer multiplier.
+
         self.assertAlmostEqual(a.descriptor(stats)[0,4].item(),np.exp(6),places=4)
         self.assertAlmostEqual(a.confidence(a.descriptor(stats))[0].item(),1.,places=6)
 

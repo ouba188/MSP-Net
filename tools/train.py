@@ -1,9 +1,3 @@
-"""Train the manuscript protocol from prepared arrays; see mspnet.training.
-
-Example: python -m tools.train prepared.npz --output runs/allport --device cuda
-An optional JSON config overrides TrainingConfig fields. Stage-one defaults
-are newly specified implementation choices, not recovered server run records.
-"""
 import argparse
 import json
 from pathlib import Path
@@ -13,7 +7,7 @@ from tools.evaluate_predictions import evaluate
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Train the manuscript protocol from prepared arrays; see mspnet.training.')
     parser.add_argument("prepared", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--config", type=Path)

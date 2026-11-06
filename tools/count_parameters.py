@@ -1,8 +1,3 @@
-"""Count parameters for a declared configuration, separating training-only heads.
-
-Example: python -m tools.count_parameters --osm-dim 68 --availability-dim 5
-No published accuracy or FLOPs is inferred from these counts.
-"""
 import argparse
 import json
 from mspnet.model import MSPNet
@@ -27,7 +22,7 @@ def count_parameters(osm_dim, availability_dim=0, num_classes=3):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
+    parser=argparse.ArgumentParser(description='Count parameters for a declared configuration, separating training-only heads.')
     parser.add_argument("--osm-dim",type=int,required=True)
     parser.add_argument("--availability-dim",type=int,default=0)
     parser.add_argument("--num-classes",type=int,default=3)

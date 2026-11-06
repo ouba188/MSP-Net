@@ -1,20 +1,3 @@
-"""Prepare training arrays from the companion manifest and mapped port objects.
-
-The manifest is produced by data_pipeline.build_manifest. Port configuration
-is a JSON object keyed by port_id; each value contains reference_lonlat
-([longitude, latitude]) and geojson (path relative to that JSON file, or
-absolute). References must be fixed independently of experiment splits.
-
-Example:
-  python -m tools.prepare_training --manifest manifest.csv --dataset-root chips
-    --ports ports.json --classes bulk_carrier container_ship tanker
-    --intensity-divisor 255 --output outputs/prepared.npz
-
-The divisor is REQUIRED: PNG sample scaling is not inferred from image maxima
-and is not a claim of radiometric calibration. Output contains local sample
-identifiers and must remain outside version control. The default outputs/
-directory is already ignored by the repository.
-"""
 from __future__ import annotations
 
 import argparse
@@ -37,12 +20,6 @@ REQUIRED = {"sample_id", "port_id", "label", "ship_group_id", "lon", "lat",
 
 
 def prepare(manifest, dataset_root, ports_config, class_names, intensity_divisor, output):
-    """Write a PreparedData NPZ; continuous-feature standardization is deferred.
-
-    The returned dictionary is preparation metadata, not experiment results.
-    Input images must be paired, single-channel 64x64 PNG chips. SAR channels
-    are constructed at 64x64, then resized together to 224x224.
-    """
     if intensity_divisor not in (1, 255):
         raise ValueError("Choose an explicit PNG intensity divisor of 1 or 255")
     class_names = tuple(class_names)
@@ -132,13 +109,13 @@ def prepare(manifest, dataset_root, ports_config, class_names, intensity_divisor
     )
     prepared.validate()
     output.parent.mkdir(parents=True, exist_ok=True)
-    # Avoid asdict(): it would deep-copy the full SAR array before writing.
+
     np.savez(output, **{name: getattr(prepared, name) for name in PreparedData.__dataclass_fields__})
     return metadata
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Prepare training arrays from the companion manifest and mapped port objects.')
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--ports", type=Path, required=True, help="JSON mapping port_id to reference_lonlat and geojson")

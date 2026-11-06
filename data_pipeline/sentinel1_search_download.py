@@ -1,10 +1,3 @@
-"""Search and optionally download Sentinel-1 products from ASF.
-
-This helper keeps Earthdata credentials outside the repository. It is intended
-for small, explicit areas and time windows; users remain responsible for the
-terms of the selected data provider.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -15,7 +8,6 @@ from typing import Any
 
 
 def parse_bbox(value: str) -> tuple[float, float, float, float]:
-    """Parse ``west,south,east,north`` and validate geographic bounds."""
     try:
         west, south, east, north = (float(part.strip()) for part in value.split(","))
     except ValueError as exc:
@@ -62,7 +54,6 @@ def search_products(
     end: str,
     max_results: int,
 ) -> Any:
-    """Query the ASF catalog using the public ``asf_search`` package."""
     try:
         import asf_search as asf
     except ImportError as exc:
@@ -81,7 +72,6 @@ def search_products(
 
 
 def authenticate_if_requested() -> Any:
-    """Build an ASF session only when credentials are supplied by the caller."""
     username = os.environ.get("EARTHDATA_USERNAME")
     password = os.environ.get("EARTHDATA_PASSWORD")
     token = os.environ.get("EARTHDATA_TOKEN")
@@ -110,7 +100,7 @@ def write_results(path: Path, products: Any) -> list[dict[str, str]]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Search and optionally download Sentinel-1 products from ASF.')
     parser.add_argument("--bbox", type=parse_bbox, required=True)
     parser.add_argument("--start", required=True, help="inclusive ISO date or datetime")
     parser.add_argument("--end", required=True, help="inclusive ISO date or datetime")
@@ -145,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

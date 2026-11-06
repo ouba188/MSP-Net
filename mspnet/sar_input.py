@@ -1,5 +1,3 @@
-"""SAR input construction used by the classification and size branches."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,13 +22,6 @@ def build_three_channel(
     vh: torch.Tensor,
     output_size: int | tuple[int, int] | None = None,
 ) -> torch.Tensor:
-    """Build ``[log(1+VV), log(1+VH), log(1+VH)-log(1+VV)]``.
-
-    The inputs may be ``H x W``, ``B x H x W``, or ``B x 1 x H x W`` tensors.
-    Values are treated as non-negative linear-intensity images.  Resizing is
-    optional and is applied after the three channels have been constructed.
-    """
-
     vv = _as_bchw(vv).float()
     vh = _as_bchw(vh).float()
     if vv.shape[1] != 1 or vh.shape[1] != 1:
@@ -54,24 +45,14 @@ def load_png_pair(
     output_size: int | tuple[int, int] | None = 224,
     normalize_uint8: bool = True,
 ) -> torch.Tensor:
-    """Load a VV/VH PNG pair and return a single ``1 x 3 x H x W`` tensor.
-
-    PNG chips in the companion SAR-AIS release are 8-bit exports.  When
-    ``normalize_uint8`` is true, every value is divided by 255 before
-    log compression.  Match this convention to the preprocessing used for a
-    particular experiment when loading other SAR products.
-    """
-
     from PIL import Image
 
     def read(path: str | Path) -> torch.Tensor:
         array = np.asarray(Image.open(path).convert("F"), dtype=np.float32)
-        # PIL hands back a read-only buffer; copy so the tensor is writable and
-        # torch stops warning on every call.
+
         tensor = torch.from_numpy(np.array(array, dtype=np.float32, copy=True))
         if normalize_uint8:
             tensor = tensor / 255.0
         return tensor
 
     return build_three_channel(read(vv_path), read(vh_path), output_size=output_size)
-

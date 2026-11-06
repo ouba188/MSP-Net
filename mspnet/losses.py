@@ -1,5 +1,3 @@
-"""Training losses used by the two-stage protocol."""
-
 from __future__ import annotations
 
 import warnings
@@ -13,8 +11,6 @@ def heteroscedastic_size_loss(
     length_m: torch.Tensor,
     width_m: torch.Tensor,
 ) -> torch.Tensor:
-    """Heteroscedastic loss for Stage-1 log-domain length/width estimation."""
-
     if size_stats.ndim != 2 or size_stats.shape[1] != 4:
         raise ValueError("size_stats must have shape [batch, 4]")
     target = torch.stack((torch.log1p(length_m.clamp_min(0.0)), torch.log1p(width_m.clamp_min(0.0))), dim=1)
@@ -24,13 +20,6 @@ def heteroscedastic_size_loss(
 
 
 def frequency_vca_loss(visual_alignment: torch.Tensor, prior_alignment: torch.Tensor, temperature: float = 0.5) -> torch.Tensor:
-    """Symmetric InfoNCE alignment between visual-frequency and prior embeddings.
-
-    Both inputs are expected to be L2-normalised already (the projection heads
-    normalise them); normalising again is a cheap no-op safety net.  For a single sample the loss degenerates to zero with no negative pair;
-    a warning makes that loss of training signal explicit.
-    """
-
     if visual_alignment.shape != prior_alignment.shape:
         raise ValueError("visual and prior alignment tensors must have the same shape")
     batch = visual_alignment.shape[0]
@@ -58,12 +47,6 @@ def mspnet_loss(
     temperature: float = 0.5,
     label_smoothing: float = 0.08,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    """Stage-2 objective; set lambda_v=0 for classification-only evaluation.
-
-    For the joint objective in eval mode, call the model with
-    return_alignment=True to obtain the two alignment embeddings.
-    """
-
     classification = F.cross_entropy(logits, labels, label_smoothing=label_smoothing)
     if lambda_v == 0:
         contrastive = logits.new_zeros(())
@@ -73,4 +56,3 @@ def mspnet_loss(
         contrastive = frequency_vca_loss(visual_alignment, prior_alignment, temperature=temperature)
     total = classification + float(lambda_v) * contrastive
     return total, {"classification": classification.detach(), "freq_vca": contrastive.detach()}
-
